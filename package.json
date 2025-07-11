@@ -1,0 +1,40 @@
+{
+  "name": "bug-buddies",
+  "version": "1.0.0",
+  "description": "Desktop insect idle game with transparent window",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "dist": "electron-builder --publish=never"
+  },
+  "keywords": ["electron", "game", "desktop", "insects"],
+  "author": "Bug Buddies",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^27.0.0",
+    "electron-builder": "^24.6.4"
+  },
+  "build": {
+    "appId": "com.bugbuddies.app",
+    "productName": "Bug Buddies",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "**/*",
+      "!node_modules",
+      "!dist"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createStartMenuShortcut": true,
+      "createDesktopShortcut": true
+    }
+  }
+}

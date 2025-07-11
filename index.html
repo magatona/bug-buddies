@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bug Buddies</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: transparent;
+            overflow: hidden;
+            cursor: none;
+        }
+        
+        #gameCanvas {
+            display: block;
+            background: transparent;
+        }
+        
+        .context-menu {
+            position: absolute;
+            background: rgba(255, 255, 255, 0.95);
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            padding: 5px 0;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            z-index: 1000;
+            display: none;
+        }
+        
+        .context-menu-item {
+            padding: 8px 16px;
+            cursor: pointer;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-size: 12px;
+        }
+        
+        .context-menu-item:hover {
+            background: #e6f3ff;
+        }
+        
+        .context-menu-separator {
+            height: 1px;
+            background: #ddd;
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    
+    <div id="contextMenu" class="context-menu">
+        <div class="context-menu-item" onclick="openSettings()">設定</div>
+        <div class="context-menu-item" onclick="openEncyclopedia()">図鑑</div>
+        <div class="context-menu-separator"></div>
+        <div class="context-menu-item" onclick="exitApp()">終了</div>
+    </div>
+    
+    <script src="game.js"></script>
+</body>
+</html>
