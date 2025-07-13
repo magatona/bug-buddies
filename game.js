@@ -1,3 +1,98 @@
+class CurrencyManager {
+    constructor() {
+        this.coins = 0;
+        this.gems = 0;
+        this.earnRate = 1;
+        this.lastEarnTime = Date.now();
+        this.totalEarned = 0;
+    }
+    
+    calculateEarnings(insects) {
+        const now = Date.now();
+        const deltaSeconds = (now - this.lastEarnTime) / 1000;
+        
+        if (deltaSeconds >= 1) {
+            const earnings = insects.reduce((total, insect) => {
+                return total + (insect.level * this.getSpeciesMultiplier(insect.type));
+            }, 0) * this.earnRate;
+            
+            this.coins += Math.floor(earnings * deltaSeconds);
+            this.totalEarned += Math.floor(earnings * deltaSeconds);
+            this.lastEarnTime = now;
+        }
+    }
+    
+    getSpeciesMultiplier(type) {
+        switch(type) {
+            case 'beetle': return 1;
+            case 'butterfly': return 1.5;
+            case 'ladybug': return 2;
+            case 'caterpillar': return 0.8;
+            default: return 1;
+        }
+    }
+    
+    canAfford(cost) {
+        return this.coins >= cost;
+    }
+    
+    spend(amount) {
+        if (this.canAfford(amount)) {
+            this.coins -= amount;
+            return true;
+        }
+        return false;
+    }
+}
+
+class UnlockManager {
+    constructor() {
+        this.unlockedSpecies = ['beetle'];
+        this.unlockedSlots = 1;
+        this.unlockCosts = {
+            species: {
+                'butterfly': 100,
+                'ladybug': 250,
+                'caterpillar': 500,
+                'dragonfly': 1000,
+                'ant': 2000
+            },
+            slots: [0, 50, 150, 300, 500, 800]
+        };
+    }
+    
+    canUnlockSpecies(species) {
+        return !this.unlockedSpecies.includes(species) && 
+               this.unlockCosts.species[species] !== undefined;
+    }
+    
+    unlockSpecies(species, currencyManager) {
+        if (this.canUnlockSpecies(species)) {
+            const cost = this.unlockCosts.species[species];
+            if (currencyManager.spend(cost)) {
+                this.unlockedSpecies.push(species);
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    canUnlockSlot() {
+        return this.unlockedSlots < this.unlockCosts.slots.length - 1;
+    }
+    
+    unlockSlot(currencyManager) {
+        if (this.canUnlockSlot()) {
+            const cost = this.unlockCosts.slots[this.unlockedSlots + 1];
+            if (currencyManager.spend(cost)) {
+                this.unlockedSlots++;
+                return true;
+            }
+        }
+        return false;
+    }
+}
+
 class BugBuddies {
     constructor() {
         this.canvas = document.getElementById('gameCanvas');
@@ -7,11 +102,18 @@ class BugBuddies {
         this.environment = [];
         this.lastTime = 0;
         
+        this.currencyManager = new CurrencyManager();
+        this.unlockManager = new UnlockManager();
+        
+        this.loadGameState();
+        
         this.setupCanvas();
         this.setupEventListeners();
         this.createInitialInsects();
         this.createEnvironment();
         this.gameLoop();
+        
+        setInterval(() => this.saveGameState(), 10000);
     }
     
     setupCanvas() {
@@ -38,10 +140,38 @@ class BugBuddies {
         window.addEventListener('resize', () => {
             this.setupCanvas();
         });
+        
+        document.addEventListener('keydown', (e) => {
+            switch(e.key) {
+                case '1':
+                    this.unlockSpecies('butterfly');
+                    break;
+                case '2':
+                    this.unlockSpecies('ladybug');
+                    break;
+                case '3':
+                    this.unlockSpecies('caterpillar');
+                    break;
+                case '4':
+                    this.unlockSpecies('dragonfly');
+                    break;
+                case '5':
+                    this.unlockSpecies('ant');
+                    break;
+                case 's':
+                    this.unlockSlot();
+                    break;
+                case 'c':
+                    this.currencyManager.coins += 100;
+                    console.log(`Added 100 coins. Total: ${this.currencyManager.coins}`);
+                    break;
+            }
+        });
     }
     
     createInitialInsects() {
-        const insectTypes = ['beetle', 'butterfly', 'ladybug', 'caterpillar'];
+        const availableSpecies = this.unlockManager.unlockedSpecies;
+        const maxSlots = this.unlockManager.unlockedSlots;
         const positions = [
             { x: this.canvas.width * 0.2, y: 70 },
             { x: this.canvas.width * 0.4, y: 50 },
@@ -49,10 +179,12 @@ class BugBuddies {
             { x: this.canvas.width * 0.8, y: 60 }
         ];
         
-        insectTypes.forEach((type, index) => {
-            const insect = new Insect(type, positions[index].x, positions[index].y);
+        for (let i = 0; i < Math.min(maxSlots, availableSpecies.length); i++) {
+            const type = availableSpecies[i % availableSpecies.length];
+            const position = positions[i % positions.length];
+            const insect = new Insect(type, position.x, position.y);
             this.insects.push(insect);
-        });
+        }
     }
 
     createEnvironment() {
@@ -104,6 +236,8 @@ class BugBuddies {
         });
         
         this.checkCollisions();
+        
+        this.currencyManager.calculateEarnings(this.insects);
     }
     
     checkCollisions() {
@@ -133,6 +267,8 @@ class BugBuddies {
         this.insects.forEach(insect => {
             insect.render(this.ctx);
         });
+        
+        this.renderUI();
     }
 
     renderEnvironment() {
@@ -197,6 +333,135 @@ class BugBuddies {
         ctx.fill();
         
         ctx.restore();
+    }
+    
+    renderUI() {
+        this.ctx.save();
+        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        this.ctx.fillRect(10, 10, 200, 60);
+        
+        this.ctx.fillStyle = '#FFD700';
+        this.ctx.font = '16px Arial';
+        this.ctx.fillText(`💰 Coins: ${this.currencyManager.coins}`, 20, 30);
+        
+        this.ctx.fillStyle = '#FFFFFF';
+        this.ctx.font = '12px Arial';
+        this.ctx.fillText(`Earn Rate: ${this.currencyManager.earnRate}/sec`, 20, 45);
+        this.ctx.fillText(`Total Earned: ${this.currencyManager.totalEarned}`, 20, 60);
+        
+        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        this.ctx.fillRect(this.canvas.width - 220, 10, 210, 80);
+        
+        this.ctx.fillStyle = '#FFFFFF';
+        this.ctx.font = '14px Arial';
+        this.ctx.fillText('Unlocked Species:', this.canvas.width - 210, 30);
+        
+        this.ctx.font = '12px Arial';
+        let yOffset = 45;
+        this.unlockManager.unlockedSpecies.forEach(species => {
+            this.ctx.fillText(`• ${species}`, this.canvas.width - 200, yOffset);
+            yOffset += 15;
+        });
+        
+        this.ctx.fillText(`Slots: ${this.unlockManager.unlockedSlots}`, this.canvas.width - 200, yOffset + 5);
+        
+        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        this.ctx.fillRect(10, this.canvas.height - 50, 400, 40);
+        
+        this.ctx.fillStyle = '#FFFFFF';
+        this.ctx.font = '10px Arial';
+        this.ctx.fillText('Controls: 1-5 = Unlock species, S = Unlock slot, C = Add coins (testing)', 15, this.canvas.height - 35);
+        this.ctx.fillText('Click to feed insects • Right-click for menu', 15, this.canvas.height - 20);
+        
+        this.ctx.restore();
+    }
+    
+    unlockSpecies(species) {
+        if (this.unlockManager.unlockSpecies(species, this.currencyManager)) {
+            console.log(`Unlocked ${species}!`);
+            if (this.insects.length < this.unlockManager.unlockedSlots) {
+                const position = this.getAvailablePosition();
+                const newInsect = new Insect(species, position.x, position.y);
+                this.insects.push(newInsect);
+            }
+            return true;
+        }
+        return false;
+    }
+    
+    unlockSlot() {
+        if (this.unlockManager.unlockSlot(this.currencyManager)) {
+            console.log(`Unlocked new slot! Total slots: ${this.unlockManager.unlockedSlots}`);
+            const availableSpecies = this.unlockManager.unlockedSpecies;
+            if (availableSpecies.length > 0) {
+                const randomSpecies = availableSpecies[Math.floor(Math.random() * availableSpecies.length)];
+                const position = this.getAvailablePosition();
+                const newInsect = new Insect(randomSpecies, position.x, position.y);
+                this.insects.push(newInsect);
+            }
+            return true;
+        }
+        return false;
+    }
+    
+    getAvailablePosition() {
+        const positions = [
+            { x: this.canvas.width * 0.2, y: 70 },
+            { x: this.canvas.width * 0.4, y: 50 },
+            { x: this.canvas.width * 0.6, y: 80 },
+            { x: this.canvas.width * 0.8, y: 60 },
+            { x: this.canvas.width * 0.1, y: 65 },
+            { x: this.canvas.width * 0.9, y: 75 }
+        ];
+        
+        return positions[this.insects.length % positions.length];
+    }
+    
+    saveGameState() {
+        const gameState = {
+            currency: {
+                coins: this.currencyManager.coins,
+                gems: this.currencyManager.gems,
+                totalEarned: this.currencyManager.totalEarned
+            },
+            unlocks: {
+                unlockedSpecies: this.unlockManager.unlockedSpecies,
+                unlockedSlots: this.unlockManager.unlockedSlots
+            },
+            insects: this.insects.map(insect => ({
+                type: insect.type,
+                x: insect.x,
+                y: insect.y,
+                level: insect.level,
+                experience: insect.experience
+            }))
+        };
+        
+        localStorage.setItem('bugBuddiesGameState', JSON.stringify(gameState));
+    }
+    
+    loadGameState() {
+        const savedState = localStorage.getItem('bugBuddiesGameState');
+        if (savedState) {
+            try {
+                const gameState = JSON.parse(savedState);
+                
+                if (gameState.currency) {
+                    this.currencyManager.coins = gameState.currency.coins || 0;
+                    this.currencyManager.gems = gameState.currency.gems || 0;
+                    this.currencyManager.totalEarned = gameState.currency.totalEarned || 0;
+                }
+                
+                if (gameState.unlocks) {
+                    this.unlockManager.unlockedSpecies = gameState.unlocks.unlockedSpecies || ['beetle'];
+                    this.unlockManager.unlockedSlots = gameState.unlocks.unlockedSlots || 1;
+                }
+                
+                console.log('Game state loaded successfully');
+            } catch (error) {
+                console.error('Failed to load game state:', error);
+            }
+        }
     }
     
     gameLoop(currentTime = 0) {
