@@ -1,0 +1,112 @@
+{
+  "insects": {
+    "beetle": {
+      "name_jp": "カブトムシ",
+      "colors": {
+        "primary": [
+          139,
+          69,
+          19
+        ],
+        "secondary": [
+          101,
+          67,
+          33
+        ]
+      },
+      "speed": "slow",
+      "animation_duration": 600,
+      "movement_style": "walk"
+    },
+    "butterfly": {
+      "name_jp": "蝶々",
+      "colors": {
+        "primary": [
+          255,
+          105,
+          180
+        ],
+        "secondary": [
+          255,
+          182,
+          193
+        ]
+      },
+      "speed": "medium",
+      "animation_duration": 400,
+      "movement_style": "flutter"
+    },
+    "ladybug": {
+      "name_jp": "てんとう虫",
+      "colors": {
+        "primary": [
+          255,
+          0,
+          0
+        ],
+        "secondary": [
+          0,
+          0,
+          0
+        ]
+      },
+      "speed": "fast",
+      "animation_duration": 300,
+      "movement_style": "quick"
+    },
+    "caterpillar": {
+      "name_jp": "イモムシ",
+      "colors": {
+        "primary": [
+          50,
+          205,
+          50
+        ],
+        "secondary": [
+          34,
+          139,
+          34
+        ]
+      },
+      "speed": "very_slow",
+      "animation_duration": 800,
+      "movement_style": "crawl"
+    },
+    "dragonfly": {
+      "name_jp": "トンボ",
+      "colors": {
+        "primary": [
+          0,
+          100,
+          0
+        ],
+        "secondary": [
+          200,
+          200,
+          255
+        ]
+      },
+      "speed": "fast",
+      "animation_duration": 350,
+      "movement_style": "hover"
+    },
+    "ant": {
+      "name_jp": "アリ",
+      "colors": {
+        "primary": [
+          0,
+          0,
+          0
+        ],
+        "secondary": [
+          50,
+          50,
+          50
+        ]
+      },
+      "speed": "medium",
+      "animation_duration": 450,
+      "movement_style": "march"
+    }
+  }
+}
