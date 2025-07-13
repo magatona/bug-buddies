@@ -4,11 +4,13 @@ class BugBuddies {
         this.ctx = this.canvas.getContext('2d');
         this.insects = [];
         this.food = [];
+        this.environment = [];
         this.lastTime = 0;
         
         this.setupCanvas();
         this.setupEventListeners();
-        this.createInitialInsect();
+        this.createInitialInsects();
+        this.createEnvironment();
         this.gameLoop();
     }
     
@@ -38,9 +40,37 @@ class BugBuddies {
         });
     }
     
-    createInitialInsect() {
-        const beetle = new Insect('beetle', this.canvas.width / 2, 70);
-        this.insects.push(beetle);
+    createInitialInsects() {
+        const insectTypes = ['beetle', 'butterfly', 'ladybug', 'caterpillar'];
+        const positions = [
+            { x: this.canvas.width * 0.2, y: 70 },
+            { x: this.canvas.width * 0.4, y: 50 },
+            { x: this.canvas.width * 0.6, y: 80 },
+            { x: this.canvas.width * 0.8, y: 60 }
+        ];
+        
+        insectTypes.forEach((type, index) => {
+            const insect = new Insect(type, positions[index].x, positions[index].y);
+            this.insects.push(insect);
+        });
+    }
+
+    createEnvironment() {
+        for (let i = 0; i < 8; i++) {
+            this.environment.push({
+                type: 'grass',
+                x: Math.random() * this.canvas.width,
+                y: 85 + Math.random() * 10
+            });
+        }
+        
+        for (let i = 0; i < 3; i++) {
+            this.environment.push({
+                type: 'flower',
+                x: Math.random() * this.canvas.width,
+                y: 75 + Math.random() * 15
+            });
+        }
     }
     
     dropFood(x, y) {
@@ -94,6 +124,8 @@ class BugBuddies {
     render() {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         
+        this.renderEnvironment();
+        
         this.food.forEach(food => {
             food.render(this.ctx);
         });
@@ -101,6 +133,70 @@ class BugBuddies {
         this.insects.forEach(insect => {
             insect.render(this.ctx);
         });
+    }
+
+    renderEnvironment() {
+        this.environment.forEach(element => {
+            if (element.type === 'grass') {
+                this.drawGrass(this.ctx, element.x, element.y);
+            } else if (element.type === 'flower') {
+                this.drawFlower(this.ctx, element.x, element.y);
+            }
+        });
+    }
+
+    drawGrass(ctx, x, y) {
+        ctx.save();
+        ctx.translate(x, y);
+        
+        ctx.fillStyle = '#228B22';
+        ctx.beginPath();
+        ctx.moveTo(-2, 0);
+        ctx.lineTo(-1, -6);
+        ctx.lineTo(0, 0);
+        ctx.fill();
+        
+        ctx.fillStyle = '#32CD32';
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(1, -7);
+        ctx.lineTo(2, 0);
+        ctx.fill();
+        
+        ctx.fillStyle = '#228B22';
+        ctx.beginPath();
+        ctx.moveTo(2, 0);
+        ctx.lineTo(3, -5);
+        ctx.lineTo(4, 0);
+        ctx.fill();
+        
+        ctx.restore();
+    }
+
+    drawFlower(ctx, x, y) {
+        ctx.save();
+        ctx.translate(x, y);
+        
+        const petalCount = 5;
+        const petalRadius = 3;
+        
+        ctx.fillStyle = '#FFB6C1';
+        for (let i = 0; i < petalCount; i++) {
+            const angle = (i * 2 * Math.PI) / petalCount;
+            const petalX = Math.cos(angle) * 4;
+            const petalY = Math.sin(angle) * 4;
+            
+            ctx.beginPath();
+            ctx.ellipse(petalX, petalY, petalRadius, petalRadius * 0.6, angle, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        ctx.fillStyle = '#FFD700';
+        ctx.beginPath();
+        ctx.arc(0, 0, 2, 0, Math.PI * 2);
+        ctx.fill();
+        
+        ctx.restore();
     }
     
     gameLoop(currentTime = 0) {
@@ -121,8 +217,9 @@ class Insect {
         this.y = y;
         this.targetX = null;
         this.targetY = null;
-        this.speed = 0.02;
+        this.speed = this.getSpeciesSpeed();
         this.direction = Math.random() > 0.5 ? 1 : -1;
+        this.movementPattern = this.getMovementPattern();
         this.animationFrame = 0;
         this.animationTime = 0;
         this.restTime = 0;
@@ -146,6 +243,35 @@ class Insect {
                 return { primary: '#32CD32', secondary: '#228B22' };
             default:
                 return { primary: '#8B4513', secondary: '#654321' };
+        }
+    }
+
+    getSpeciesSpeed() {
+        switch(this.type) {
+            case 'beetle': return 0.02;
+            case 'butterfly': return 0.025;
+            case 'ladybug': return 0.03;
+            case 'caterpillar': return 0.015;
+            default: return 0.02;
+        }
+    }
+
+    getMovementPattern() {
+        switch(this.type) {
+            case 'butterfly': return 'flutter';
+            case 'ladybug': return 'quick';
+            case 'caterpillar': return 'crawl';
+            default: return 'walk';
+        }
+    }
+
+    applyMovementPattern(deltaTime) {
+        if (this.movementPattern === 'flutter' && !this.targetX) {
+            this.y += Math.sin(Date.now() * 0.003) * 0.5;
+            this.y = Math.max(30, Math.min(90, this.y));
+        } else if (this.movementPattern === 'quick' && Math.random() < 0.002) {
+            this.speed *= 2;
+            setTimeout(() => { this.speed = this.getSpeciesSpeed(); }, 500);
         }
     }
     
@@ -193,6 +319,8 @@ class Insect {
                 this.isResting = true;
             }
         }
+        
+        this.applyMovementPattern(deltaTime);
         
         if (this.animationTime > 500) {
             this.animationFrame = (this.animationFrame + 1) % 2;
