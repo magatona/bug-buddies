@@ -1,0 +1,253 @@
+name: 🎨 Bug Buddies Asset Generation
+on:
+  workflow_dispatch:
+    inputs:
+      insect_types:
+        description: 'Comma-separated list of insect types to generate'
+        required: false
+        default: 'beetle,butterfly,ladybug,caterpillar,ui'
+      asset_variants:
+        description: 'Number of asset variants per insect'
+        required: false
+        default: '3'
+      enable_animations:
+        description: 'Generate animations (true/false)'
+        required: false
+        default: 'true'
+  schedule:
+    - cron: '0 2 * * *'  # Daily at 2 AM UTC
+
+env:
+  # Free AI Generation APIs (optional - system works without any API keys)
+  USE_HUGGINGFACE: 'true'  # Completely free, no API key needed
+  HF_MODEL_ID: 'runwayml/stable-diffusion-v1-5'  # Can be customized
+  LEONARDO_API_KEY: ${{ secrets.LEONARDO_API_KEY }}  # Optional: 150 free credits/day
+  REPLICATE_API_KEY: ${{ secrets.REPLICATE_API_KEY }}  # Optional: ~$0.01-0.05/image
+  
+  # Repository and notification settings
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  GAME_REPO_TOKEN: ${{ secrets.GAME_REPO_TOKEN }}
+  TARGET_REPO: ${{ secrets.TARGET_REPO || 'magatona/bug-buddies' }}
+  WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+  SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+jobs:
+  prepare:
+    name: 🔧 Prepare Asset Generation
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.generate-matrix.outputs.matrix }}
+      total-agents: ${{ steps.generate-matrix.outputs.total-agents }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          
+      - name: Install dependencies
+        run: |
+          pip install torch torchvision diffusers transformers accelerate pillow imageio requests PyGithub replicate
+          
+      - name: Generate agent matrix
+        id: generate-matrix
+        run: |
+          python scripts/generate_asset_matrix.py
+          
+      - name: Display matrix
+        run: |
+          echo "Generated matrix for ${{ steps.generate-matrix.outputs.total-agents }} agents"
+          echo '${{ steps.generate-matrix.outputs.matrix }}' | jq .
+
+  parallel-agents:
+    name: 🤖 Agent ${{ matrix.agent_id }} - ${{ matrix.insect_type }}
+    runs-on: ubuntu-latest
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          
+      - name: Install dependencies
+        run: |
+          pip install torch torchvision diffusers transformers accelerate pillow imageio requests PyGithub replicate
+          
+      - name: Generate assets for ${{ matrix.insect_type }}
+        env:
+          AGENT_ID: ${{ matrix.agent_id }}
+          INSECT_TYPE: ${{ matrix.insect_type }}
+          ASSET_VARIANTS: ${{ toJson(matrix.variants) }}
+          ENABLE_ANIMATIONS: ${{ github.event.inputs.enable_animations || 'true' }}
+        run: |
+          echo "🎨 Agent ${{ matrix.agent_id }} generating ${{ matrix.insect_type }} assets..."
+          python scripts/generate_assets.py
+          
+      - name: Create animations
+        if: ${{ github.event.inputs.enable_animations != 'false' }}
+        env:
+          AGENT_ID: ${{ matrix.agent_id }}
+          INSECT_TYPE: ${{ matrix.insect_type }}
+        run: |
+          echo "🎬 Agent ${{ matrix.agent_id }} creating ${{ matrix.insect_type }} animations..."
+          python scripts/create_animations.py
+          
+      - name: Upload agent artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-${{ matrix.agent_id }}-${{ matrix.insect_type }}-assets
+          path: temp_assets/agent_${{ matrix.agent_id }}/
+          retention-days: 7
+
+  aggregate:
+    name: 📦 Aggregate Assets
+    runs-on: ubuntu-latest
+    needs: [prepare, parallel-agents]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          
+      - name: Install dependencies
+        run: |
+          pip install torch torchvision diffusers transformers accelerate pillow imageio requests PyGithub replicate
+          
+      - name: Download all agent artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: temp_assets/
+          pattern: agent-*-assets
+          merge-multiple: true
+          
+      - name: List downloaded artifacts
+        run: |
+          echo "📁 Downloaded artifacts:"
+          find temp_assets/ -type f -name "*.png" -o -name "*.gif" | head -20
+          
+      - name: Aggregate and optimize assets
+        run: |
+          echo "📦 Aggregating assets from ${{ needs.prepare.outputs.total-agents }} agents..."
+          python scripts/aggregate_assets.py
+          
+      - name: Upload aggregated assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: bug-buddies-assets
+          path: assets/
+          retention-days: 30
+          
+      - name: Upload asset summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: asset-generation-report
+          path: asset_summary.json
+          retention-days: 30
+
+  transfer:
+    name: 🔄 Transfer to Game Repository
+    runs-on: ubuntu-latest
+    needs: [prepare, parallel-agents, aggregate]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          
+      - name: Install dependencies
+        run: |
+          pip install requests PyGithub
+          
+      - name: Download aggregated assets
+        uses: actions/download-artifact@v4
+        with:
+          name: bug-buddies-assets
+          path: assets/
+          
+      - name: Download asset report
+        uses: actions/download-artifact@v4
+        with:
+          name: asset-generation-report
+          path: ./
+          
+      - name: Transfer assets to game repository
+        id: transfer
+        run: |
+          echo "🔄 Transferring assets to ${{ env.TARGET_REPO }}..."
+          python scripts/transfer_to_game_repo.py
+          
+      - name: Set PR number for next job
+        run: |
+          echo "PR_NUMBER=${{ steps.transfer.outputs.pr_number }}" >> $GITHUB_ENV
+          
+      - name: Trigger recursive integration
+        if: steps.transfer.outputs.pr_number != ''
+        uses: ./.github/workflows/recursive-integration.yml
+        with:
+          pr_number: ${{ steps.transfer.outputs.pr_number }}
+
+  notify:
+    name: 📢 Send Notifications
+    runs-on: ubuntu-latest
+    needs: [prepare, parallel-agents, aggregate, transfer]
+    if: always()
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          
+      - name: Install dependencies
+        run: |
+          pip install requests
+          
+      - name: Send completion notifications
+        env:
+          PR_NUMBER: ${{ needs.transfer.outputs.pr_number }}
+        run: |
+          echo "📢 Sending completion notifications..."
+          python scripts/send_notification.py
+
+  cleanup:
+    name: 🧹 Cleanup Temporary Assets
+    runs-on: ubuntu-latest
+    needs: [transfer, notify]
+    if: always()
+    steps:
+      - name: Delete temporary artifacts
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: context.runId,
+            });
+            
+            for (const artifact of artifacts.data.artifacts) {
+              if (artifact.name.startsWith('agent-') && artifact.name.endsWith('-assets')) {
+                await github.rest.actions.deleteArtifact({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  artifact_id: artifact.id,
+                });
+                console.log(`Deleted temporary artifact: ${artifact.name}`);
+              }
+            }

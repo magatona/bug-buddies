@@ -6,10 +6,21 @@ class BugBuddies {
         this.food = [];
         this.lastTime = 0;
         
+        this.initializeAssetManager();
         this.setupCanvas();
         this.setupEventListeners();
         this.createInitialInsect();
         this.gameLoop();
+    }
+    
+    async initializeAssetManager() {
+        if (typeof AssetManager !== 'undefined') {
+            window.assetManager = new AssetManager();
+            await window.assetManager.initialize();
+            console.log('✅ AssetManager initialized');
+        } else {
+            console.log('⚠️ AssetManager not available, using programmatic drawing');
+        }
     }
     
     setupCanvas() {
@@ -132,6 +143,30 @@ class Insect {
         this.size = 32;
         
         this.colors = this.getColors();
+        this.currentAsset = null;
+        this.currentAnimation = null;
+        this.useAssets = false;
+        
+        if (window.assetManager) {
+            this.loadAssets();
+        }
+    }
+    
+    async loadAssets() {
+        try {
+            if (window.assetManager.isAssetAvailable(this.type)) {
+                this.currentAsset = await window.assetManager.getCharacterAsset(this.type, 'idle');
+                this.useAssets = true;
+                console.log(`✅ Loaded assets for ${this.type}`);
+            }
+            
+            if (window.assetManager.isAnimationAvailable(this.type)) {
+                this.currentAnimation = await window.assetManager.getAnimation(this.type, 'walking');
+            }
+        } catch (error) {
+            console.warn(`⚠️ Failed to load assets for ${this.type}:`, error);
+            this.useAssets = false;
+        }
     }
     
     getColors() {
@@ -225,11 +260,34 @@ class Insect {
             ctx.scale(-1, 1);
         }
         
-        this.drawInsect(ctx);
+        if (this.useAssets && this.currentAsset) {
+            this.drawAssetSprite(ctx);
+        } else {
+            this.drawInsect(ctx);
+        }
         
         ctx.restore();
         
         this.drawLevelIndicator(ctx);
+    }
+    
+    drawAssetSprite(ctx) {
+        const size = this.size;
+        const halfSize = size / 2;
+        
+        try {
+            ctx.drawImage(
+                this.currentAsset,
+                -halfSize,
+                -halfSize,
+                size,
+                size
+            );
+        } catch (error) {
+            console.warn(`⚠️ Failed to draw asset for ${this.type}, falling back to programmatic drawing`);
+            this.useAssets = false;
+            this.drawInsect(ctx);
+        }
     }
     
     drawInsect(ctx) {
