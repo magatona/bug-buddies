@@ -1,0 +1,213 @@
+name: 🔄 Recursive Asset Integration
+on:
+  workflow_call:
+    inputs:
+      pr_number:
+        description: 'PR number to monitor and merge'
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to monitor and merge'
+        required: true
+        type: string
+      target_repo:
+        description: 'Target repository (owner/repo)'
+        required: false
+        default: 'magatona/bug-buddies'
+      max_wait_time:
+        description: 'Maximum wait time in seconds'
+        required: false
+        default: '1800'
+
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  GAME_REPO_TOKEN: ${{ secrets.GAME_REPO_TOKEN }}
+  TARGET_REPO: ${{ github.event.inputs.target_repo || secrets.TARGET_REPO || 'magatona/bug-buddies' }}
+  PR_NUMBER: ${{ github.event.inputs.pr_number || inputs.pr_number }}
+  MAX_WAIT_TIME: ${{ github.event.inputs.max_wait_time || '1800' }}
+  CHECK_INTERVAL: '60'
+  WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+  SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+jobs:
+  find-pr:
+    name: 🔍 Find Asset PR
+    runs-on: ubuntu-latest
+    outputs:
+      pr_number: ${{ steps.find-pr.outputs.pr_number }}
+      pr_found: ${{ steps.find-pr.outputs.pr_found }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          
+      - name: Install dependencies
+        run: |
+          pip install torch torchvision diffusers transformers accelerate pillow imageio requests PyGithub replicate
+          
+      - name: Find asset PR
+        id: find-pr
+        run: |
+          echo "🔍 Looking for asset PR in ${{ env.TARGET_REPO }}..."
+          python scripts/find_asset_pr.py
+          
+      - name: Display PR info
+        if: steps.find-pr.outputs.pr_found == 'true'
+        run: |
+          echo "✅ Found PR #${{ steps.find-pr.outputs.pr_number }} in ${{ env.TARGET_REPO }}"
+          
+      - name: No PR found
+        if: steps.find-pr.outputs.pr_found != 'true'
+        run: |
+          echo "⚠️ No asset PR found in ${{ env.TARGET_REPO }}"
+          echo "This may be normal if the transfer job hasn't completed yet."
+
+  monitor-and-merge:
+    name: 🔄 Monitor PR and Auto-Merge
+    runs-on: ubuntu-latest
+    needs: find-pr
+    if: needs.find-pr.outputs.pr_found == 'true'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          
+      - name: Install dependencies
+        run: |
+          pip install torch torchvision diffusers transformers accelerate pillow imageio requests PyGithub replicate
+          
+      - name: Monitor PR and auto-merge
+        env:
+          PR_NUMBER: ${{ needs.find-pr.outputs.pr_number }}
+        run: |
+          echo "🔄 Monitoring PR #${{ needs.find-pr.outputs.pr_number }} for auto-merge..."
+          python scripts/monitor_and_merge.py
+          
+      - name: Verify merge success
+        if: success()
+        run: |
+          echo "✅ PR #${{ needs.find-pr.outputs.pr_number }} successfully merged!"
+          
+      - name: Handle merge failure
+        if: failure()
+        run: |
+          echo "❌ Failed to merge PR #${{ needs.find-pr.outputs.pr_number }}"
+          echo "Manual intervention may be required."
+
+  post-merge-validation:
+    name: ✅ Post-Merge Validation
+    runs-on: ubuntu-latest
+    needs: [find-pr, monitor-and-merge]
+    if: needs.find-pr.outputs.pr_found == 'true' && needs.monitor-and-merge.result == 'success'
+    steps:
+      - name: Validate asset integration
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GAME_REPO_TOKEN }}
+          script: |
+            const [owner, repo] = '${{ env.TARGET_REPO }}'.split('/');
+            
+            // Check if assets directory exists
+            try {
+              const { data: contents } = await github.rest.repos.getContent({
+                owner,
+                repo,
+                path: 'assets'
+              });
+              
+              console.log('✅ Assets directory found in target repository');
+              
+              // Check for manifest.json
+              const manifestExists = contents.some(item => item.name === 'manifest.json');
+              if (manifestExists) {
+                console.log('✅ Asset manifest found');
+              } else {
+                console.log('⚠️ Asset manifest not found');
+              }
+              
+              // Check for character directories
+              const characterDirs = contents.filter(item => 
+                item.type === 'dir' && ['characters', 'animations', 'ui'].includes(item.name)
+              );
+              
+              console.log(`✅ Found ${characterDirs.length} asset directories`);
+              
+            } catch (error) {
+              console.log('❌ Failed to validate asset integration:', error.message);
+              core.setFailed('Asset validation failed');
+            }
+
+  notify-completion:
+    name: 📢 Notify Integration Complete
+    runs-on: ubuntu-latest
+    needs: [find-pr, monitor-and-merge, post-merge-validation]
+    if: always()
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          
+      - name: Install dependencies
+        run: |
+          pip install requests
+          
+      - name: Send integration completion notification
+        env:
+          PR_NUMBER: ${{ needs.find-pr.outputs.pr_number }}
+          INTEGRATION_STATUS: ${{ needs.monitor-and-merge.result }}
+          VALIDATION_STATUS: ${{ needs.post-merge-validation.result }}
+        run: |
+          echo "📢 Sending recursive integration completion notification..."
+          
+          # Create status message
+          if [ "${{ needs.monitor-and-merge.result }}" = "success" ]; then
+            export NOTIFICATION_TITLE="🎉 Bug Buddies Recursive Integration Complete"
+            export NOTIFICATION_MESSAGE="Assets successfully integrated into game repository"
+            export NOTIFICATION_COLOR="0x00ff00"
+          else
+            export NOTIFICATION_TITLE="⚠️ Bug Buddies Integration Issue"
+            export NOTIFICATION_MESSAGE="Asset integration encountered issues"
+            export NOTIFICATION_COLOR="0xff9900"
+          fi
+          
+          python scripts/send_notification.py
+
+  schedule-next-generation:
+    name: 📅 Schedule Next Generation
+    runs-on: ubuntu-latest
+    needs: [post-merge-validation]
+    if: needs.post-merge-validation.result == 'success'
+    steps:
+      - name: Calculate next generation time
+        run: |
+          echo "📅 Calculating next asset generation schedule..."
+          
+          # Calculate next run time (24 hours from now)
+          next_run=$(date -d "+24 hours" -u +"%Y-%m-%dT%H:%M:%SZ")
+          echo "Next generation scheduled for: $next_run"
+          
+          # Store for potential future scheduling logic
+          echo "NEXT_GENERATION_TIME=$next_run" >> $GITHUB_ENV
+          
+      - name: Log completion metrics
+        run: |
+          echo "📊 Recursive Integration Metrics:"
+          echo "- PR Number: ${{ needs.find-pr.outputs.pr_number }}"
+          echo "- Target Repository: ${{ env.TARGET_REPO }}"
+          echo "- Integration Status: ${{ needs.monitor-and-merge.result }}"
+          echo "- Validation Status: ${{ needs.post-merge-validation.result }}"
+          echo "- Completion Time: $(date -u +"%Y-%m-%d %H:%M:%S UTC")"

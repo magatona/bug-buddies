@@ -3,17 +3,24 @@ import json
 import sys
 import time
 from typing import Dict, List, Any
-import requests
+import torch
 from PIL import Image, ImageDraw
 import io
 
+try:
+    from diffusers import StableDiffusionPipeline
+    DIFFUSERS_AVAILABLE = True
+except ImportError:
+    DIFFUSERS_AVAILABLE = False
+    print("⚠️ diffusers not available, falling back to alternative methods")
+
 class BugBuddiesAssetGenerator:
-    """DALL-E 3 powered pixel art generator for Bug Buddies insects."""
+    """Free AI-powered pixel art generator for Bug Buddies insects using Hugging Face Diffusers."""
     
     def __init__(self):
-        self.api_key = os.environ.get("OPENAI_API_KEY")
-        if not self.api_key:
-            raise ValueError("OPENAI_API_KEY environment variable is required")
+        self.use_huggingface = DIFFUSERS_AVAILABLE and os.environ.get("USE_HUGGINGFACE", "true").lower() == "true"
+        self.leonardo_api_key = os.environ.get("LEONARDO_API_KEY")  # Optional
+        self.replicate_api_key = os.environ.get("REPLICATE_API_KEY")  # Optional
         
         self.agent_id = int(os.environ.get("AGENT_ID", "1"))
         self.insect_type = os.environ.get("INSECT_TYPE", "beetle")
@@ -25,93 +32,119 @@ class BugBuddiesAssetGenerator:
         
         self.base_prompt_templates = self.get_prompt_templates()
         
+        self.pipeline = None
+        if self.use_huggingface:
+            self.init_huggingface_pipeline()
+        
+        print(f"🎨 Agent {self.agent_id} initialized for {self.insect_type}")
+        print(f"🔧 Generation method: {'Hugging Face Diffusers' if self.use_huggingface else 'Alternative APIs'}")
+    
+    def init_huggingface_pipeline(self):
+        """Initialize Hugging Face Stable Diffusion pipeline."""
+        try:
+            print("🤖 Loading Hugging Face Stable Diffusion pipeline...")
+            
+            model_id = os.environ.get("HF_MODEL_ID", "runwayml/stable-diffusion-v1-5")
+            
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            torch_dtype = torch.float16 if device == "cuda" else torch.float32
+            
+            self.pipeline = StableDiffusionPipeline.from_pretrained(
+                model_id,
+                torch_dtype=torch_dtype,
+                use_safetensors=True,
+                safety_checker=None,  # Disable for faster generation
+                requires_safety_checker=False
+            )
+            
+            self.pipeline = self.pipeline.to(device)
+            
+            if device == "cuda":
+                self.pipeline.enable_memory_efficient_attention()
+                self.pipeline.enable_xformers_memory_efficient_attention()
+            
+            print(f"✅ Pipeline loaded on {device}")
+            
+        except Exception as e:
+            print(f"❌ Failed to initialize Hugging Face pipeline: {e}")
+            self.use_huggingface = False
+            self.pipeline = None
+        
     def get_prompt_templates(self) -> Dict[str, str]:
-        """Get optimized DALL-E 3 prompts for each insect type."""
+        """Get optimized pixel art prompts for each insect type."""
         templates = {
             "beetle": {
-                "base": "A cute pixel art beetle character for a desktop pet game, 32x32 pixels, brown and dark brown colors, simple design with clear outlines, transparent background, top-down view, game sprite style",
-                "idle": "A cute pixel art beetle character standing still, 32x32 pixels, brown body with darker brown head, simple pixel art style, transparent background, desktop pet game sprite",
-                "walk_1": "A cute pixel art beetle character in walking pose 1, 32x32 pixels, brown body, legs positioned for walking animation, simple pixel art style, transparent background",
-                "walk_2": "A cute pixel art beetle character in walking pose 2, 32x32 pixels, brown body, legs in different walking position, simple pixel art style, transparent background",
-                "level_2": "A cute pixel art beetle character level 2, 32x32 pixels, slightly larger brown beetle with small sparkles, simple pixel art style, transparent background",
-                "level_3": "A cute pixel art beetle character level 3, 32x32 pixels, larger brown beetle with golden highlights, simple pixel art style, transparent background"
+                "base": "pixel art, 8bit style, cute beetle character, game sprite, brown and dark brown colors, simple design, clear outlines, retro gaming, detailed pixels, 16bit game character",
+                "idle": "pixel art, 8bit style, cute beetle character standing still, game sprite, brown body with darker brown head, retro gaming, detailed pixels, desktop pet",
+                "walk_1": "pixel art, 8bit style, cute beetle character walking pose 1, game sprite, brown body, legs positioned for walking, retro gaming, detailed pixels",
+                "walk_2": "pixel art, 8bit style, cute beetle character walking pose 2, game sprite, brown body, legs in different walking position, retro gaming, detailed pixels",
+                "level_2": "pixel art, 8bit style, cute beetle character level 2, game sprite, slightly larger brown beetle with small sparkles, retro gaming, detailed pixels",
+                "level_3": "pixel art, 8bit style, cute beetle character level 3, game sprite, larger brown beetle with golden highlights, retro gaming, detailed pixels"
             },
             "butterfly": {
-                "base": "A cute pixel art butterfly character for a desktop pet game, 32x32 pixels, pink and light pink wings, simple design with clear outlines, transparent background, top-down view",
-                "idle": "A cute pixel art butterfly character with wings spread, 32x32 pixels, pink and light pink wings, simple pixel art style, transparent background",
-                "fly_1": "A cute pixel art butterfly character flying pose 1, 32x32 pixels, wings up position, pink colors, simple pixel art style, transparent background",
-                "fly_2": "A cute pixel art butterfly character flying pose 2, 32x32 pixels, wings middle position, pink colors, simple pixel art style, transparent background",
-                "fly_3": "A cute pixel art butterfly character flying pose 3, 32x32 pixels, wings down position, pink colors, simple pixel art style, transparent background",
-                "fly_4": "A cute pixel art butterfly character flying pose 4, 32x32 pixels, wings up again, pink colors, simple pixel art style, transparent background"
+                "base": "pixel art, 8bit style, cute butterfly character, game sprite, pink and light pink wings, colorful, simple design, clear outlines, retro gaming, detailed pixels",
+                "idle": "pixel art, 8bit style, cute butterfly character with wings spread, game sprite, pink and light pink wings, retro gaming, detailed pixels, desktop pet",
+                "fly_1": "pixel art, 8bit style, cute butterfly character flying pose 1, game sprite, wings up position, pink colors, retro gaming, detailed pixels",
+                "fly_2": "pixel art, 8bit style, cute butterfly character flying pose 2, game sprite, wings middle position, pink colors, retro gaming, detailed pixels",
+                "fly_3": "pixel art, 8bit style, cute butterfly character flying pose 3, game sprite, wings down position, pink colors, retro gaming, detailed pixels",
+                "fly_4": "pixel art, 8bit style, cute butterfly character flying pose 4, game sprite, wings up again, pink colors, retro gaming, detailed pixels"
             },
             "ladybug": {
-                "base": "A cute pixel art ladybug character for a desktop pet game, 32x32 pixels, red body with black spots, simple design with clear outlines, transparent background",
-                "idle": "A cute pixel art ladybug character standing still, 32x32 pixels, red body with black spots and head, simple pixel art style, transparent background",
-                "walk_1": "A cute pixel art ladybug character walking pose 1, 32x32 pixels, red body with black spots, legs in walking position, simple pixel art style, transparent background",
-                "walk_2": "A cute pixel art ladybug character walking pose 2, 32x32 pixels, red body with black spots, legs in different walking position, simple pixel art style, transparent background",
-                "level_2": "A cute pixel art ladybug character level 2, 32x32 pixels, slightly larger red ladybug with more spots, simple pixel art style, transparent background",
-                "level_3": "A cute pixel art ladybug character level 3, 32x32 pixels, larger red ladybug with golden spots, simple pixel art style, transparent background"
+                "base": "pixel art, 8bit style, cute ladybug character, game sprite, red body with black spots, simple design, clear outlines, retro gaming, detailed pixels",
+                "idle": "pixel art, 8bit style, cute ladybug character standing still, game sprite, red body with black spots and head, retro gaming, detailed pixels, desktop pet",
+                "walk_1": "pixel art, 8bit style, cute ladybug character walking pose 1, game sprite, red body with black spots, legs in walking position, retro gaming, detailed pixels",
+                "walk_2": "pixel art, 8bit style, cute ladybug character walking pose 2, game sprite, red body with black spots, legs in different walking position, retro gaming, detailed pixels",
+                "level_2": "pixel art, 8bit style, cute ladybug character level 2, game sprite, slightly larger red ladybug with more spots, retro gaming, detailed pixels",
+                "level_3": "pixel art, 8bit style, cute ladybug character level 3, game sprite, larger red ladybug with golden spots, retro gaming, detailed pixels"
             },
             "caterpillar": {
-                "base": "A cute pixel art caterpillar character for a desktop pet game, 32x32 pixels, green segmented body, simple design with clear outlines, transparent background",
-                "idle": "A cute pixel art caterpillar character resting, 32x32 pixels, green segmented body with cute face, simple pixel art style, transparent background",
-                "crawl_1": "A cute pixel art caterpillar character crawling pose 1, 32x32 pixels, green segmented body in S-curve, simple pixel art style, transparent background",
-                "crawl_2": "A cute pixel art caterpillar character crawling pose 2, 32x32 pixels, green segmented body in different curve, simple pixel art style, transparent background",
-                "crawl_3": "A cute pixel art caterpillar character crawling pose 3, 32x32 pixels, green segmented body stretched out, simple pixel art style, transparent background"
+                "base": "pixel art, 8bit style, cute caterpillar character, game sprite, green segmented body, simple design, clear outlines, retro gaming, detailed pixels",
+                "idle": "pixel art, 8bit style, cute caterpillar character resting, game sprite, green segmented body with cute face, retro gaming, detailed pixels, desktop pet",
+                "crawl_1": "pixel art, 8bit style, cute caterpillar character crawling pose 1, game sprite, green segmented body in S-curve, retro gaming, detailed pixels",
+                "crawl_2": "pixel art, 8bit style, cute caterpillar character crawling pose 2, game sprite, green segmented body in different curve, retro gaming, detailed pixels",
+                "crawl_3": "pixel art, 8bit style, cute caterpillar character crawling pose 3, game sprite, green segmented body stretched out, retro gaming, detailed pixels"
             },
             "ui_elements": {
-                "base": "Cute pixel art UI elements for a desktop pet insect game, 32x32 pixels each, simple design with clear outlines, transparent background",
-                "food_pellet": "A cute pixel art food pellet for insects, 16x16 pixels, golden yellow color, round shape, simple pixel art style, transparent background",
-                "sparkle_effect": "A cute pixel art sparkle effect, 24x24 pixels, white and yellow sparkles, simple pixel art style, transparent background",
-                "level_up_effect": "A cute pixel art level up effect, 32x32 pixels, golden stars and sparkles, simple pixel art style, transparent background",
-                "heart_icon": "A cute pixel art heart icon, 16x16 pixels, red heart shape, simple pixel art style, transparent background",
-                "star_icon": "A cute pixel art star icon, 16x16 pixels, golden yellow star, simple pixel art style, transparent background"
+                "base": "pixel art, 8bit style, cute UI elements for desktop pet insect game, simple design, clear outlines, retro gaming, detailed pixels",
+                "food_pellet": "pixel art, 8bit style, cute food pellet for insects, golden yellow color, round shape, retro gaming, detailed pixels, game item",
+                "sparkle_effect": "pixel art, 8bit style, cute sparkle effect, white and yellow sparkles, retro gaming, detailed pixels, game effect",
+                "level_up_effect": "pixel art, 8bit style, cute level up effect, golden stars and sparkles, retro gaming, detailed pixels, game effect",
+                "heart_icon": "pixel art, 8bit style, cute heart icon, red heart shape, retro gaming, detailed pixels, game UI",
+                "star_icon": "pixel art, 8bit style, cute star icon, golden yellow star, retro gaming, detailed pixels, game UI"
             }
         }
         return templates.get(self.insect_type, templates["beetle"])
     
     def generate_single_asset(self, variant: str) -> bool:
-        """Generate a single asset variant using DALL-E 3."""
+        """Generate a single asset variant using free AI methods."""
         try:
             prompt = self.base_prompt_templates.get(variant, self.base_prompt_templates["base"])
             
             if self.quality_level == "high":
-                prompt += ", highly detailed pixel art, professional game sprite quality"
+                prompt += ", highly detailed pixel art, professional game sprite quality, sharp pixels"
             elif self.quality_level == "draft":
                 prompt += ", simple pixel art, basic game sprite"
+            else:
+                prompt += ", clean pixel art, game ready sprite"
             
             print(f"🎨 Agent {self.agent_id}: Generating {self.insect_type} - {variant}")
             print(f"📝 Prompt: {prompt[:100]}...")
             
-            response = requests.post(
-                "https://api.openai.com/v1/images/generations",
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "model": "dall-e-3",
-                    "prompt": prompt,
-                    "n": 1,
-                    "size": "1024x1024",
-                    "quality": "standard" if self.quality_level != "high" else "hd",
-                    "style": "natural"
-                }
-            )
+            original_image = None
             
-            if response.status_code != 200:
-                print(f"❌ API Error: {response.status_code} - {response.text}")
+            if self.use_huggingface and self.pipeline:
+                original_image = self.generate_with_huggingface(prompt)
+            elif self.leonardo_api_key:
+                original_image = self.generate_with_leonardo(prompt)
+            elif self.replicate_api_key:
+                original_image = self.generate_with_replicate(prompt)
+            else:
+                original_image = self.generate_programmatic_fallback(variant)
+            
+            if original_image is None:
+                print(f"❌ All generation methods failed for {variant}")
                 return False
             
-            result = response.json()
-            image_url = result["data"][0]["url"]
-            
-            img_response = requests.get(image_url)
-            if img_response.status_code != 200:
-                print(f"❌ Failed to download image: {img_response.status_code}")
-                return False
-            
-            original_image = Image.open(io.BytesIO(img_response.content))
             processed_image = self.process_to_pixel_art(original_image, variant)
             
             output_path = os.path.join(self.output_dir, f"{self.insect_type}_{variant}.png")
@@ -123,6 +156,135 @@ class BugBuddiesAssetGenerator:
         except Exception as e:
             print(f"❌ Agent {self.agent_id}: Failed to generate {variant}: {e}")
             return False
+    
+    def generate_with_huggingface(self, prompt: str) -> Image.Image:
+        """Generate image using Hugging Face Diffusers (completely free)."""
+        try:
+            print("🤖 Generating with Hugging Face Diffusers...")
+            
+            negative_prompt = "blurry, low quality, distorted, realistic, photographic, 3d render, smooth, antialiased"
+            
+            with torch.no_grad():
+                result = self.pipeline(
+                    prompt=prompt,
+                    negative_prompt=negative_prompt,
+                    num_inference_steps=25,  # Good balance of quality/speed
+                    guidance_scale=7.5,      # Standard guidance
+                    width=512,
+                    height=512,
+                    num_images_per_prompt=1
+                )
+            
+            return result.images[0]
+            
+        except Exception as e:
+            print(f"❌ Hugging Face generation failed: {e}")
+            return None
+    
+    def generate_with_leonardo(self, prompt: str) -> Image.Image:
+        """Generate image using Leonardo.AI (150 free credits/day)."""
+        try:
+            print("🎨 Generating with Leonardo.AI...")
+            
+            import requests
+            
+            response = requests.post(
+                'https://cloud.leonardo.ai/api/rest/v1/generations',
+                headers={
+                    'Authorization': f'Bearer {self.leonardo_api_key}',
+                    'Content-Type': 'application/json'
+                },
+                json={
+                    'prompt': prompt,
+                    'modelId': '6bef9f1b-29cb-40c7-b9df-32b51c1f67d3',  # Pixel Art model
+                    'num_images': 1,
+                    'width': 512,
+                    'height': 512,
+                    'guidance_scale': 7,
+                    'num_inference_steps': 25
+                }
+            )
+            
+            if response.status_code != 200:
+                print(f"❌ Leonardo API Error: {response.status_code}")
+                return None
+            
+            result = response.json()
+            image_url = result['sdGenerationJob']['generatedImages'][0]['url']
+            
+            img_response = requests.get(image_url)
+            if img_response.status_code == 200:
+                return Image.open(io.BytesIO(img_response.content))
+            
+            return None
+            
+        except Exception as e:
+            print(f"❌ Leonardo generation failed: {e}")
+            return None
+    
+    def generate_with_replicate(self, prompt: str) -> Image.Image:
+        """Generate image using Replicate API (low cost ~$0.01-0.05/image)."""
+        try:
+            print("🔥 Generating with Replicate...")
+            
+            import replicate
+            
+            output = replicate.run(
+                "stability-ai/stable-diffusion:27b93a2413e7f36cd83da926f3656280b2931564ff050bf9575f1fdf9bcd7478",
+                input={
+                    "prompt": prompt,
+                    "width": 512,
+                    "height": 512,
+                    "num_inference_steps": 25,
+                    "guidance_scale": 7.5,
+                    "num_outputs": 1
+                }
+            )
+            
+            if output and len(output) > 0:
+                import requests
+                img_response = requests.get(output[0])
+                if img_response.status_code == 200:
+                    return Image.open(io.BytesIO(img_response.content))
+            
+            return None
+            
+        except Exception as e:
+            print(f"❌ Replicate generation failed: {e}")
+            return None
+    
+    def generate_programmatic_fallback(self, variant: str) -> Image.Image:
+        """Generate a simple programmatic sprite as fallback."""
+        try:
+            print("🎮 Using programmatic fallback generation...")
+            
+            image = Image.new('RGBA', (512, 512), (0, 0, 0, 0))
+            draw = ImageDraw.Draw(image)
+            
+            if self.insect_type == "beetle":
+                draw.ellipse([200, 220, 312, 292], fill=(139, 69, 19, 255))
+                draw.ellipse([230, 180, 282, 220], fill=(101, 67, 33, 255))
+            elif self.insect_type == "butterfly":
+                draw.ellipse([180, 200, 240, 260], fill=(255, 192, 203, 255))  # Left wing
+                draw.ellipse([272, 200, 332, 260], fill=(255, 192, 203, 255))  # Right wing
+                draw.ellipse([248, 220, 264, 280], fill=(139, 69, 19, 255))
+            elif self.insect_type == "ladybug":
+                draw.ellipse([200, 220, 312, 292], fill=(255, 0, 0, 255))
+                draw.ellipse([220, 235, 235, 250], fill=(0, 0, 0, 255))
+                draw.ellipse([277, 235, 292, 250], fill=(0, 0, 0, 255))
+                draw.ellipse([230, 180, 282, 220], fill=(0, 0, 0, 255))
+            elif self.insect_type == "caterpillar":
+                for i in range(5):
+                    x = 200 + i * 20
+                    draw.ellipse([x, 230, x + 25, 255], fill=(34, 139, 34, 255))
+            else:  # ui_elements
+                draw.ellipse([230, 230, 282, 282], fill=(255, 215, 0, 255))
+            
+            return image
+            
+        except Exception as e:
+            print(f"❌ Programmatic fallback failed: {e}")
+            return None
     
     def process_to_pixel_art(self, image: Image.Image, variant: str) -> Image.Image:
         """Process the generated image to proper 32x32 pixel art with transparency."""
