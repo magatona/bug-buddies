@@ -63,7 +63,14 @@ def generate_asset_matrix():
     matrix = {"include": agent_assignments}
     
     matrix_string = json.dumps(matrix)
-    print(f"matrix={matrix_string}")
+    
+    if "GITHUB_OUTPUT" in os.environ:
+        with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+            f.write(f"matrix={matrix_string}\n")
+            f.write(f"total-agents={len(agent_assignments)}\n")
+    else:
+        print(f"matrix={matrix_string}")
+        print(f"total-agents={len(agent_assignments)}")
     
     os.makedirs("temp_assets/config", exist_ok=True)
     with open("temp_assets/config/generation_config.json", "w") as f:
