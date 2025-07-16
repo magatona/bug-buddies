@@ -104,6 +104,7 @@ class BugBuddies {
         
         this.currencyManager = new CurrencyManager();
         this.unlockManager = new UnlockManager();
+        this.buttons = this.initializeButtons();
         
         this.loadGameState();
         
@@ -123,7 +124,20 @@ class BugBuddies {
     
     setupEventListeners() {
         this.canvas.addEventListener('click', (e) => {
-            this.dropFood(e.clientX, e.clientY);
+            const rect = this.canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            const clickedButton = this.buttons.find(button => 
+                x >= button.x && x <= button.x + button.width &&
+                y >= button.y && y <= button.y + button.height
+            );
+            
+            if (clickedButton && this.isButtonEnabled(clickedButton)) {
+                clickedButton.action();
+            } else {
+                this.dropFood(x, y);
+            }
         });
         
         this.canvas.addEventListener('contextmenu', (e) => {
@@ -139,6 +153,7 @@ class BugBuddies {
         
         window.addEventListener('resize', () => {
             this.setupCanvas();
+            this.buttons = this.initializeButtons();
         });
         
         document.addEventListener('keydown', (e) => {
@@ -167,6 +182,80 @@ class BugBuddies {
                     break;
             }
         });
+    }
+    
+    initializeButtons() {
+        const buttonWidth = 80;
+        const buttonHeight = 25;
+        const buttonSpacing = 10;
+        const startX = 20;
+        const startY = 80; // Position in visible lower area of canvas
+        
+        
+        return [
+            { x: startX, y: startY, width: buttonWidth, height: buttonHeight, 
+              label: 'Butterfly', action: () => this.unlockSpecies('butterfly'), 
+              cost: this.unlockManager.unlockCosts.species.butterfly, species: 'butterfly' },
+            { x: startX + (buttonWidth + buttonSpacing) * 1, y: startY, width: buttonWidth, height: buttonHeight,
+              label: 'Ladybug', action: () => this.unlockSpecies('ladybug'),
+              cost: this.unlockManager.unlockCosts.species.ladybug, species: 'ladybug' },
+            { x: startX + (buttonWidth + buttonSpacing) * 2, y: startY, width: buttonWidth, height: buttonHeight,
+              label: 'Caterpillar', action: () => this.unlockSpecies('caterpillar'),
+              cost: this.unlockManager.unlockCosts.species.caterpillar, species: 'caterpillar' },
+            { x: startX + (buttonWidth + buttonSpacing) * 3, y: startY, width: buttonWidth, height: buttonHeight,
+              label: 'Dragonfly', action: () => this.unlockSpecies('dragonfly'),
+              cost: this.unlockManager.unlockCosts.species.dragonfly, species: 'dragonfly' },
+            { x: startX + (buttonWidth + buttonSpacing) * 4, y: startY, width: buttonWidth, height: buttonHeight,
+              label: 'Ant', action: () => this.unlockSpecies('ant'),
+              cost: this.unlockManager.unlockCosts.species.ant, species: 'ant' },
+            { x: startX + (buttonWidth + buttonSpacing) * 5, y: startY, width: buttonWidth, height: buttonHeight,
+              label: 'Add Slot', action: () => this.unlockSlot(),
+              cost: () => this.unlockManager.unlockCosts.slots[this.unlockManager.unlockedSlots + 1] || 0, isSlot: true },
+            { x: startX + (buttonWidth + buttonSpacing) * 6, y: startY, width: buttonWidth, height: buttonHeight,
+              label: '+100 Coins', action: () => { this.currencyManager.coins += 100; console.log(`Added 100 coins. Total: ${this.currencyManager.coins}`); },
+              cost: 0, isTest: true }
+        ];
+    }
+    
+    isButtonEnabled(button) {
+        if (button.isTest) return true;
+        
+        if (button.species) {
+            return this.unlockManager.canUnlockSpecies(button.species) && 
+                   this.currencyManager.canAfford(button.cost);
+        } else if (button.isSlot) {
+            const cost = typeof button.cost === 'function' ? button.cost() : button.cost;
+            return this.unlockManager.canUnlockSlot() && 
+                   this.currencyManager.canAfford(cost);
+        }
+        
+        return false;
+    }
+    
+    renderButtons() {
+        this.buttons.forEach((button, index) => {
+            const enabled = this.isButtonEnabled(button);
+            const cost = typeof button.cost === 'function' ? button.cost() : button.cost;
+            
+            this.ctx.fillStyle = enabled ? 'rgba(0, 255, 0, 0.9)' : 'rgba(255, 0, 0, 0.9)';
+            this.ctx.fillRect(button.x, button.y, button.width, button.height);
+            
+            this.ctx.strokeStyle = enabled ? '#00FF00' : '#FF0000';
+            this.ctx.lineWidth = 2;
+            this.ctx.strokeRect(button.x, button.y, button.width, button.height);
+            
+            this.ctx.fillStyle = '#FFFFFF';
+            this.ctx.font = '12px Arial';
+            this.ctx.textAlign = 'center';
+            
+            this.ctx.fillText(button.label, button.x + button.width/2, button.y + 15);
+            
+            if (!button.isTest && cost > 0) {
+                this.ctx.fillText(`${cost}💰`, button.x + button.width/2, button.y + 25);
+            }
+        });
+        
+        this.ctx.textAlign = 'left';
     }
     
     createInitialInsects() {
@@ -366,12 +455,13 @@ class BugBuddies {
         this.ctx.fillText(`Slots: ${this.unlockManager.unlockedSlots}`, this.canvas.width - 200, yOffset + 5);
         
         this.ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-        this.ctx.fillRect(10, this.canvas.height - 50, 400, 40);
+        this.ctx.fillRect(10, this.canvas.height - 50, this.canvas.width - 20, 40);
         
         this.ctx.fillStyle = '#FFFFFF';
         this.ctx.font = '10px Arial';
-        this.ctx.fillText('Controls: 1-5 = Unlock species, S = Unlock slot, C = Add coins (testing)', 15, this.canvas.height - 35);
-        this.ctx.fillText('Click to feed insects • Right-click for menu', 15, this.canvas.height - 20);
+        this.ctx.fillText('Click buttons to unlock • Click empty area to feed insects • Right-click for menu', 15, this.canvas.height - 5);
+        
+        this.renderButtons();
         
         this.ctx.restore();
     }
@@ -805,3 +895,4 @@ function exitApp() {
 }
 
 const game = new BugBuddies();
+window.game = game;
