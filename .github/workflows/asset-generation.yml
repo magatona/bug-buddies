@@ -85,7 +85,7 @@ jobs:
         env:
           AGENT_ID: ${{ matrix.agent_id }}
           INSECT_TYPE: ${{ matrix.insect_type }}
-          ASSET_VARIANTS: ${{ toJson(matrix.variants) }}
+          ASSET_VARIANTS: ${{ toJson(matrix.asset_variants) }}
           ENABLE_ANIMATIONS: ${{ github.event.inputs.enable_animations || 'true' }}
         run: |
           echo "🎨 Agent ${{ matrix.agent_id }} generating ${{ matrix.insect_type }} assets..."
@@ -196,7 +196,7 @@ jobs:
           
       - name: Trigger recursive integration
         if: steps.transfer.outputs.pr_number != ''
-        uses: ./.github/workflows/recursive-integration.yml
+        uses: ./.github/workflows/recursive-integration.yml@clean-implementation
         with:
           pr_number: ${{ steps.transfer.outputs.pr_number }}
 
@@ -234,6 +234,7 @@ jobs:
       - name: Delete temporary artifacts
         uses: actions/github-script@v7
         with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
               owner: context.repo.owner,
