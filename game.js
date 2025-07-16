@@ -49,6 +49,7 @@ class UnlockManager {
     constructor() {
         this.unlockedSpecies = ['beetle'];
         this.unlockedSlots = 1;
+        this.speciesLevels = { 'beetle': 1 };
         this.unlockCosts = {
             species: {
                 'butterfly': 100,
@@ -71,6 +72,7 @@ class UnlockManager {
             const cost = this.unlockCosts.species[species];
             if (currencyManager.spend(cost)) {
                 this.unlockedSpecies.push(species);
+                this.speciesLevels[species] = 1;
                 return true;
             }
         }
@@ -91,6 +93,404 @@ class UnlockManager {
         }
         return false;
     }
+    
+    getSpeciesLevel(species) {
+        return this.speciesLevels[species] || 1;
+    }
+    
+    setSpeciesLevel(species, level) {
+        this.speciesLevels[species] = level;
+    }
+}
+
+class CardManager {
+    constructor(currencyManager, unlockManager) {
+        this.currencyManager = currencyManager;
+        this.unlockManager = unlockManager;
+        this.speciesData = this.loadSpeciesData();
+        this.cards = this.initializeCards();
+        this.selectedCard = null;
+        this.showDetailPanel = false;
+        this.cardWidth = 80;
+        this.cardHeight = 60;
+        this.cardSpacing = 5;
+    }
+    
+    loadSpeciesData() {
+        return {
+            "insects": {
+                "beetle": {
+                    "name_jp": "カブトムシ",
+                    "name_en": "Beetle",
+                    "description": "のっそりと歩く茶色の昆虫。力強く、安定した収益を生み出します。",
+                    "base_cost": 120,
+                    "upgrade_costs": [120, 300, 720, 1800, 4000, 8000, 15000, 25000, 40000, 60000],
+                    "max_level": 10,
+                    "earnings_multiplier": 1.0
+                },
+                "butterfly": {
+                    "name_jp": "蝶々",
+                    "name_en": "Butterfly", 
+                    "description": "ひらひらと舞う美しい昆虫。中程度の収益と魅力的な動きが特徴です。",
+                    "base_cost": 300,
+                    "upgrade_costs": [300, 750, 1800, 4500, 10000, 20000, 35000, 55000, 80000, 120000],
+                    "max_level": 10,
+                    "earnings_multiplier": 1.5
+                },
+                "ladybug": {
+                    "name_jp": "てんとう虫",
+                    "name_en": "Ladybug",
+                    "description": "ちょこちょこと素早く動く赤い昆虫。高い収益率を誇ります。",
+                    "base_cost": 720,
+                    "upgrade_costs": [720, 1800, 4320, 10800, 24000, 48000, 84000, 132000, 192000, 288000],
+                    "max_level": 10,
+                    "earnings_multiplier": 2.0
+                },
+                "caterpillar": {
+                    "name_jp": "イモムシ",
+                    "name_en": "Caterpillar",
+                    "description": "ゆっくりと這う緑の昆虫。低コストで始められる初心者向けです。",
+                    "base_cost": 1800,
+                    "upgrade_costs": [1800, 4500, 10800, 27000, 60000, 120000, 210000, 330000, 480000, 720000],
+                    "max_level": 10,
+                    "earnings_multiplier": 0.8
+                },
+                "dragonfly": {
+                    "name_jp": "トンボ",
+                    "name_en": "Dragonfly",
+                    "description": "空中を優雅に舞う昆虫。高速移動と優秀な収益性を持ちます。",
+                    "base_cost": 4000,
+                    "upgrade_costs": [4000, 10000, 24000, 60000, 133000, 266000, 466000, 733000, 1066000, 1600000],
+                    "max_level": 10,
+                    "earnings_multiplier": 2.5
+                },
+                "ant": {
+                    "name_jp": "アリ",
+                    "name_en": "Ant",
+                    "description": "組織的に行動する働き者の昆虫。集団効果で収益が向上します。",
+                    "base_cost": 6000,
+                    "upgrade_costs": [6000, 15000, 36000, 90000, 200000, 400000, 700000, 1100000, 1600000, 2400000],
+                    "max_level": 10,
+                    "earnings_multiplier": 1.8
+                }
+            }
+        };
+    }
+    
+    initializeCards() {
+        const speciesOrder = ['beetle', 'butterfly', 'ladybug', 'caterpillar', 'dragonfly', 'ant'];
+        return speciesOrder.map(species => ({
+            id: species,
+            data: this.speciesData.insects[species],
+            x: 0, y: 0,
+            state: this.getCardState(species)
+        }));
+    }
+    
+    getCardState(species) {
+        if (this.unlockManager.unlockedSpecies.includes(species)) {
+            return 'owned';
+        } else if (this.currencyManager.canAfford(this.getSpeciesCost(species))) {
+            return 'available';
+        } else {
+            return 'locked';
+        }
+    }
+    
+    getSpeciesCost(species) {
+        return this.speciesData.insects[species]?.base_cost || 0;
+    }
+    
+    getUpgradeCost(species, currentLevel) {
+        const data = this.speciesData.insects[species];
+        if (!data || currentLevel >= data.max_level) return 0;
+        return data.upgrade_costs[currentLevel] || 0;
+    }
+    
+    handleCardClick(cardId) {
+        const card = this.cards.find(c => c.id === cardId);
+        if (!card) return;
+        
+        if (card.state === 'available') {
+            this.purchaseSpecies(cardId);
+        } else if (card.state === 'owned') {
+            this.showSpeciesDetail(cardId);
+        }
+    }
+    
+    purchaseSpecies(species) {
+        const cost = this.getSpeciesCost(species);
+        if (this.currencyManager.spend(cost)) {
+            this.unlockManager.unlockedSpecies.push(species);
+            this.unlockManager.speciesLevels[species] = 1;
+            this.updateCardStates();
+            console.log(`Purchased ${species} for ${cost} coins!`);
+            return true;
+        }
+        return false;
+    }
+    
+    showSpeciesDetail(species) {
+        this.selectedCard = this.cards.find(c => c.id === species);
+        this.showDetailPanel = true;
+    }
+    
+    hideDetailPanel() {
+        this.showDetailPanel = false;
+        this.selectedCard = null;
+    }
+    
+    upgradeSpecies(speciesId) {
+        const currentLevel = this.unlockManager.getSpeciesLevel(speciesId);
+        const upgradeCost = this.getUpgradeCost(speciesId, currentLevel);
+        
+        if (upgradeCost > 0 && this.currencyManager.canAfford(upgradeCost)) {
+            this.currencyManager.spend(upgradeCost);
+            this.unlockManager.setSpeciesLevel(speciesId, currentLevel + 1);
+            console.log(`Upgraded ${speciesId} to level ${currentLevel + 1} for ${upgradeCost} coins!`);
+            return true;
+        }
+        return false;
+    }
+    
+    updateCardStates() {
+        this.cards.forEach(card => {
+            card.state = this.getCardState(card.id);
+        });
+    }
+    
+    getCardAtPosition(x, y) {
+        return this.cards.find(card => 
+            x >= card.x && x <= card.x + this.cardWidth &&
+            y >= card.y && y <= card.y + this.cardHeight
+        );
+    }
+    
+    layoutCards() {
+        const startX = 10;
+        const startY = 15;
+        const maxCardsPerRow = Math.floor((window.innerWidth - 20) / (this.cardWidth + this.cardSpacing));
+        
+        this.cards.forEach((card, index) => {
+            const row = Math.floor(index / maxCardsPerRow);
+            const col = index % maxCardsPerRow;
+            
+            card.x = startX + col * (this.cardWidth + this.cardSpacing);
+            card.y = startY + row * (this.cardHeight + this.cardSpacing);
+        });
+    }
+    
+    drawSpeciesIcon(ctx, speciesData, x, y, species) {
+        const size = 20;
+        const halfSize = size / 2;
+        
+        ctx.save();
+        ctx.translate(x, y);
+        
+        switch(species) {
+            case 'beetle':
+                ctx.fillStyle = '#8B4513';
+                ctx.beginPath();
+                ctx.ellipse(0, 0, halfSize * 0.8, halfSize * 0.6, 0, 0, Math.PI * 2);
+                ctx.fill();
+                break;
+            case 'butterfly':
+                ctx.fillStyle = '#FF69B4';
+                ctx.beginPath();
+                ctx.ellipse(-halfSize * 0.3, -halfSize * 0.3, halfSize * 0.4, halfSize * 0.3, 0, 0, Math.PI * 2);
+                ctx.ellipse(halfSize * 0.3, -halfSize * 0.3, halfSize * 0.4, halfSize * 0.3, 0, 0, Math.PI * 2);
+                ctx.fill();
+                break;
+            case 'ladybug':
+                ctx.fillStyle = '#FF0000';
+                ctx.beginPath();
+                ctx.ellipse(0, 0, halfSize * 0.7, halfSize * 0.5, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#000000';
+                ctx.beginPath();
+                ctx.arc(-halfSize * 0.2, -halfSize * 0.1, halfSize * 0.1, 0, Math.PI * 2);
+                ctx.arc(halfSize * 0.2, -halfSize * 0.1, halfSize * 0.1, 0, Math.PI * 2);
+                ctx.fill();
+                break;
+            case 'caterpillar':
+                ctx.fillStyle = '#32CD32';
+                for (let i = 0; i < 3; i++) {
+                    const segX = (i - 1) * halfSize * 0.4;
+                    ctx.beginPath();
+                    ctx.arc(segX, 0, halfSize * 0.3, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                break;
+            case 'dragonfly':
+                ctx.fillStyle = '#006400';
+                ctx.fillRect(-halfSize * 0.1, -halfSize, halfSize * 0.2, size);
+                ctx.fillStyle = '#C8C8FF';
+                ctx.beginPath();
+                ctx.ellipse(-halfSize * 0.4, -halfSize * 0.2, halfSize * 0.3, halfSize * 0.1, 0, 0, Math.PI * 2);
+                ctx.ellipse(halfSize * 0.4, -halfSize * 0.2, halfSize * 0.3, halfSize * 0.1, 0, 0, Math.PI * 2);
+                ctx.fill();
+                break;
+            case 'ant':
+                ctx.fillStyle = '#000000';
+                ctx.beginPath();
+                ctx.arc(-halfSize * 0.3, 0, halfSize * 0.2, 0, Math.PI * 2);
+                ctx.arc(0, 0, halfSize * 0.25, 0, Math.PI * 2);
+                ctx.arc(halfSize * 0.3, 0, halfSize * 0.2, 0, Math.PI * 2);
+                ctx.fill();
+                break;
+        }
+        
+        ctx.restore();
+    }
+    
+    renderCard(ctx, card) {
+        const { x, y } = card;
+        const { cardWidth, cardHeight } = this;
+        
+        const bgColor = {
+            'available': 'rgba(0, 255, 0, 0.8)',
+            'locked': 'rgba(100, 100, 100, 0.6)',
+            'owned': 'rgba(0, 100, 255, 0.8)'
+        }[card.state];
+        
+        ctx.fillStyle = bgColor;
+        ctx.fillRect(x, y, cardWidth, cardHeight);
+        
+        ctx.strokeStyle = card.state === 'available' ? '#00FF00' : card.state === 'owned' ? '#0066FF' : '#666666';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x, y, cardWidth, cardHeight);
+        
+        this.drawSpeciesIcon(ctx, card.data, x + cardWidth/2, y + 20, card.id);
+        
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = '10px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(card.data.name_jp, x + cardWidth/2, y + cardHeight - 15);
+        
+        if (card.state !== 'owned') {
+            ctx.fillText(`${card.data.base_cost}💰`, x + cardWidth/2, y + cardHeight - 5);
+        } else {
+            const level = this.unlockManager.getSpeciesLevel(card.id);
+            ctx.fillText(`Lv.${level}`, x + cardWidth/2, y + cardHeight - 5);
+        }
+    }
+    
+    wrapText(ctx, text, x, y, maxWidth, lineHeight) {
+        const words = text.split('');
+        let line = '';
+        let currentY = y;
+        
+        for (let i = 0; i < words.length; i++) {
+            const testLine = line + words[i];
+            const metrics = ctx.measureText(testLine);
+            const testWidth = metrics.width;
+            
+            if (testWidth > maxWidth && i > 0) {
+                ctx.fillText(line, x, currentY);
+                line = words[i];
+                currentY += lineHeight;
+            } else {
+                line = testLine;
+            }
+        }
+        ctx.fillText(line, x, currentY);
+    }
+    
+    renderUpgradeButton(ctx, x, y) {
+        if (!this.selectedCard) return;
+        
+        const currentLevel = this.unlockManager.getSpeciesLevel(this.selectedCard.id);
+        const upgradeCost = this.getUpgradeCost(this.selectedCard.id, currentLevel);
+        const canUpgrade = upgradeCost > 0 && this.currencyManager.canAfford(upgradeCost);
+        
+        ctx.fillStyle = canUpgrade ? 'rgba(0, 255, 0, 0.8)' : 'rgba(150, 150, 150, 0.8)';
+        ctx.fillRect(x, y, 70, 20);
+        
+        ctx.strokeStyle = canUpgrade ? '#00FF00' : '#999999';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x, y, 70, 20);
+        
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = '10px Arial';
+        ctx.textAlign = 'center';
+        
+        if (currentLevel >= this.selectedCard.data.max_level) {
+            ctx.fillText('最大レベル', x + 35, y + 14);
+        } else {
+            ctx.fillText(`強化 ${upgradeCost}💰`, x + 35, y + 14);
+        }
+        
+        this.upgradeButtonBounds = { x, y, width: 70, height: 20 };
+    }
+    
+    renderDetailPanel(ctx) {
+        if (!this.selectedCard) return;
+        
+        const panelWidth = 300;
+        const panelHeight = 80;
+        const panelX = (ctx.canvas.width - panelWidth) / 2;
+        const panelY = 10;
+        
+        ctx.fillStyle = 'rgba(240, 230, 200, 0.95)';
+        ctx.fillRect(panelX, panelY, panelWidth, panelHeight);
+        
+        ctx.strokeStyle = '#8B4513';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(panelX, panelY, panelWidth, panelHeight);
+        
+        const card = this.selectedCard;
+        const level = this.unlockManager.getSpeciesLevel(card.id);
+        
+        ctx.fillStyle = '#000000';
+        ctx.font = '14px Arial';
+        ctx.textAlign = 'left';
+        ctx.fillText(`${card.data.name_jp} Lv.${level}`, panelX + 10, panelY + 20);
+        
+        ctx.font = '10px Arial';
+        this.wrapText(ctx, card.data.description, panelX + 10, panelY + 35, panelWidth - 100, 12);
+        
+        if (card.state === 'owned') {
+            this.renderUpgradeButton(ctx, panelX + panelWidth - 80, panelY + panelHeight - 25);
+        }
+        
+        ctx.fillStyle = 'rgba(255, 0, 0, 0.8)';
+        ctx.fillRect(panelX + panelWidth - 20, panelY + 5, 15, 15);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('×', panelX + panelWidth - 12, panelY + 15);
+        
+        this.closeBounds = { x: panelX + panelWidth - 20, y: panelY + 5, width: 15, height: 15 };
+    }
+    
+    handleDetailPanelClick(x, y) {
+        if (this.closeBounds && 
+            x >= this.closeBounds.x && x <= this.closeBounds.x + this.closeBounds.width &&
+            y >= this.closeBounds.y && y <= this.closeBounds.y + this.closeBounds.height) {
+            this.hideDetailPanel();
+            return true;
+        }
+        
+        if (this.upgradeButtonBounds && 
+            x >= this.upgradeButtonBounds.x && x <= this.upgradeButtonBounds.x + this.upgradeButtonBounds.width &&
+            y >= this.upgradeButtonBounds.y && y <= this.upgradeButtonBounds.y + this.upgradeButtonBounds.height) {
+            if (this.selectedCard) {
+                this.upgradeSpecies(this.selectedCard.id);
+            }
+            return true;
+        }
+        
+        return false;
+    }
+    
+    renderCards(ctx) {
+        this.updateCardStates();
+        this.layoutCards();
+        this.cards.forEach(card => this.renderCard(ctx, card));
+        if (this.showDetailPanel) {
+            this.renderDetailPanel(ctx);
+        }
+    }
 }
 
 class BugBuddies {
@@ -104,6 +504,7 @@ class BugBuddies {
         
         this.currencyManager = new CurrencyManager();
         this.unlockManager = new UnlockManager();
+        this.cardManager = new CardManager(this.currencyManager, this.unlockManager);
         this.buttons = this.initializeButtons();
         
         this.loadGameState();
@@ -127,6 +528,18 @@ class BugBuddies {
             const rect = this.canvas.getBoundingClientRect();
             const x = e.clientX - rect.left;
             const y = e.clientY - rect.top;
+            
+            if (this.cardManager.showDetailPanel) {
+                if (this.cardManager.handleDetailPanelClick(x, y)) {
+                    return;
+                }
+            }
+            
+            const clickedCard = this.cardManager.getCardAtPosition(x, y);
+            if (clickedCard) {
+                this.cardManager.handleCardClick(clickedCard.id);
+                return;
+            }
             
             const clickedButton = this.buttons.find(button => 
                 x >= button.x && x <= button.x + button.width &&
@@ -154,6 +567,7 @@ class BugBuddies {
         window.addEventListener('resize', () => {
             this.setupCanvas();
             this.buttons = this.initializeButtons();
+            this.cardManager.layoutCards();
         });
         
         document.addEventListener('keydown', (e) => {
@@ -459,9 +873,9 @@ class BugBuddies {
         
         this.ctx.fillStyle = '#FFFFFF';
         this.ctx.font = '10px Arial';
-        this.ctx.fillText('Click buttons to unlock • Click empty area to feed insects • Right-click for menu', 15, this.canvas.height - 5);
+        this.ctx.fillText('Click cards to purchase/upgrade • Click empty area to feed insects • Right-click for menu', 15, this.canvas.height - 5);
         
-        this.renderButtons();
+        this.cardManager.renderCards(this.ctx);
         
         this.ctx.restore();
     }
@@ -516,7 +930,8 @@ class BugBuddies {
             },
             unlocks: {
                 unlockedSpecies: this.unlockManager.unlockedSpecies,
-                unlockedSlots: this.unlockManager.unlockedSlots
+                unlockedSlots: this.unlockManager.unlockedSlots,
+                speciesLevels: this.unlockManager.speciesLevels
             },
             insects: this.insects.map(insect => ({
                 type: insect.type,
@@ -545,6 +960,7 @@ class BugBuddies {
                 if (gameState.unlocks) {
                     this.unlockManager.unlockedSpecies = gameState.unlocks.unlockedSpecies || ['beetle'];
                     this.unlockManager.unlockedSlots = gameState.unlocks.unlockedSlots || 1;
+                    this.unlockManager.speciesLevels = gameState.unlocks.speciesLevels || { 'beetle': 1 };
                 }
                 
                 console.log('Game state loaded successfully');

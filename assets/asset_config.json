@@ -2,17 +2,15 @@
   "insects": {
     "beetle": {
       "name_jp": "カブトムシ",
+      "name_en": "Beetle",
+      "description": "のっそりと歩く茶色の昆虫。力強く、安定した収益を生み出します。",
+      "base_cost": 120,
+      "upgrade_costs": [120, 300, 720, 1800, 4000, 8000, 15000, 25000, 40000, 60000],
+      "max_level": 10,
+      "earnings_multiplier": 1.0,
       "colors": {
-        "primary": [
-          139,
-          69,
-          19
-        ],
-        "secondary": [
-          101,
-          67,
-          33
-        ]
+        "primary": [139, 69, 19],
+        "secondary": [101, 67, 33]
       },
       "speed": "slow",
       "animation_duration": 600,
@@ -20,17 +18,15 @@
     },
     "butterfly": {
       "name_jp": "蝶々",
+      "name_en": "Butterfly",
+      "description": "ひらひらと舞う美しい昆虫。中程度の収益と魅力的な動きが特徴です。",
+      "base_cost": 300,
+      "upgrade_costs": [300, 750, 1800, 4500, 10000, 20000, 35000, 55000, 80000, 120000],
+      "max_level": 10,
+      "earnings_multiplier": 1.5,
       "colors": {
-        "primary": [
-          255,
-          105,
-          180
-        ],
-        "secondary": [
-          255,
-          182,
-          193
-        ]
+        "primary": [255, 105, 180],
+        "secondary": [255, 182, 193]
       },
       "speed": "medium",
       "animation_duration": 400,
@@ -38,17 +34,15 @@
     },
     "ladybug": {
       "name_jp": "てんとう虫",
+      "name_en": "Ladybug",
+      "description": "ちょこちょこと素早く動く赤い昆虫。高い収益率を誇ります。",
+      "base_cost": 720,
+      "upgrade_costs": [720, 1800, 4320, 10800, 24000, 48000, 84000, 132000, 192000, 288000],
+      "max_level": 10,
+      "earnings_multiplier": 2.0,
       "colors": {
-        "primary": [
-          255,
-          0,
-          0
-        ],
-        "secondary": [
-          0,
-          0,
-          0
-        ]
+        "primary": [255, 0, 0],
+        "secondary": [0, 0, 0]
       },
       "speed": "fast",
       "animation_duration": 300,
@@ -56,17 +50,15 @@
     },
     "caterpillar": {
       "name_jp": "イモムシ",
+      "name_en": "Caterpillar",
+      "description": "ゆっくりと這う緑の昆虫。低コストで始められる初心者向けです。",
+      "base_cost": 1800,
+      "upgrade_costs": [1800, 4500, 10800, 27000, 60000, 120000, 210000, 330000, 480000, 720000],
+      "max_level": 10,
+      "earnings_multiplier": 0.8,
       "colors": {
-        "primary": [
-          50,
-          205,
-          50
-        ],
-        "secondary": [
-          34,
-          139,
-          34
-        ]
+        "primary": [50, 205, 50],
+        "secondary": [34, 139, 34]
       },
       "speed": "very_slow",
       "animation_duration": 800,
@@ -74,17 +66,15 @@
     },
     "dragonfly": {
       "name_jp": "トンボ",
+      "name_en": "Dragonfly",
+      "description": "空中を優雅に舞う昆虫。高速移動と優秀な収益性を持ちます。",
+      "base_cost": 4000,
+      "upgrade_costs": [4000, 10000, 24000, 60000, 133000, 266000, 466000, 733000, 1066000, 1600000],
+      "max_level": 10,
+      "earnings_multiplier": 2.5,
       "colors": {
-        "primary": [
-          0,
-          100,
-          0
-        ],
-        "secondary": [
-          200,
-          200,
-          255
-        ]
+        "primary": [0, 100, 0],
+        "secondary": [200, 200, 255]
       },
       "speed": "fast",
       "animation_duration": 350,
@@ -92,17 +82,15 @@
     },
     "ant": {
       "name_jp": "アリ",
+      "name_en": "Ant",
+      "description": "組織的に行動する働き者の昆虫。集団効果で収益が向上します。",
+      "base_cost": 6000,
+      "upgrade_costs": [6000, 15000, 36000, 90000, 200000, 400000, 700000, 1100000, 1600000, 2400000],
+      "max_level": 10,
+      "earnings_multiplier": 1.8,
       "colors": {
-        "primary": [
-          0,
-          0,
-          0
-        ],
-        "secondary": [
-          50,
-          50,
-          50
-        ]
+        "primary": [0, 0, 0],
+        "secondary": [50, 50, 50]
       },
       "speed": "medium",
       "animation_duration": 450,
