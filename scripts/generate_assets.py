@@ -168,8 +168,8 @@ class BugBuddiesAssetGenerator:
                 result = self.pipeline(
                     prompt=prompt,
                     negative_prompt=negative_prompt,
-                    num_inference_steps=25,  # Good balance of quality/speed
-                    guidance_scale=7.5,      # Standard guidance
+                    num_inference_steps=15,  # Reduced for faster generation (was 25)
+                    guidance_scale=6.0,      # Slightly reduced for speed
                     width=512,
                     height=512,
                     num_images_per_prompt=1
