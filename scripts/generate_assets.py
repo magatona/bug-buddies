@@ -302,8 +302,19 @@ class BugBuddiesAssetGenerator:
         temp_size = (target_size[0] * 4, target_size[1] * 4)
         image = image.resize(temp_size, Image.Resampling.LANCZOS)
         
-        image = image.quantize(colors=16, method=Image.Quantize.MEDIANCUT)
-        image = image.convert('RGBA')
+        if image.mode == 'RGBA':
+            rgb_image = Image.new('RGB', image.size, (255, 255, 255))
+            rgb_image.paste(image, mask=image.split()[-1])  # Use alpha as mask
+            rgb_quantized = rgb_image.quantize(colors=16, method=Image.Quantize.MEDIANCUT)
+            rgb_quantized = rgb_quantized.convert('RGB')
+            
+            final_image = Image.new('RGBA', image.size)
+            final_image.paste(rgb_quantized)
+            final_image.putalpha(image.split()[-1])  # Restore original alpha
+            image = final_image
+        else:
+            image = image.quantize(colors=16, method=Image.Quantize.MEDIANCUT)
+            image = image.convert('RGBA')
         
         image = image.resize(target_size, Image.Resampling.NEAREST)
         
