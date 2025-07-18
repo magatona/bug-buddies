@@ -193,7 +193,7 @@ class AssetAggregator:
                 "animations": animations
             }
         
-        report_path = f"{self.output_dir}/aggregation_report.json"
+        report_path = "asset_summary.json"
         with open(report_path, 'w') as f:
             json.dump(report, f, indent=2)
         
